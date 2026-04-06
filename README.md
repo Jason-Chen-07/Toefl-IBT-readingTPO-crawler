@@ -1,95 +1,58 @@
 # Zhan TOEFL Reading Crawler
 
-从小站托福阅读入口页抓取指定 `TPO/Official` 的文章、题目，并导出成适合刷题的 worksheet。
+中文：这是一个从小站教育托福阅读页面抓取文章、题目与答案，并导出黑白打印版试卷的工具。  
+English: This project crawls TOEFL reading passages, questions, and answers from Xiaozhan Education pages and exports printer-friendly black-and-white worksheets.
 
-## 现在支持
+## Features
 
-- 从总入口 `https://top.zhan.com/toefl/read/alltpo.html` 找到指定 `tpo33` 的分组页
-- 列出该 TPO 下 3 篇文章
-- 选择某一篇后抓取
-  - 文章标题
-  - 文章正文
-  - 全部题目
-  - 选项
-  - 正确答案
-- 导出 3 份文件
-  - `raw.json`
-  - `document.md`
-  - `worksheet.md`
+- Search by `TPO` or keyword
+- Export worksheet, document, and answer files
+- Build a local index with Chinese and English subject labels
+- Print-friendly black-and-white HTML output
+- Prebuilt index files included in `data/`
 
-## 安装
-
-```bash
-cd /Users/chensfolder/zhan-toefl-crawler
-python3 -m pip install -e .
-```
-
-也可以不安装，直接运行模块：
+## Run
 
 ```bash
 PYTHONPATH=src python3 -m zhan_toefl_crawler
 ```
 
-## 交互式使用
+## Menu
 
-```bash
-PYTHONPATH=src python3 -m zhan_toefl_crawler
-```
+- `1` Search TPO or keyword
+- `2` Export worksheet
+- `q` Quit
 
-示例流程：
+## Output
 
-```text
-Enter TPO (example: tpo33): tpo33
-[1] The First Civilizations
-[2] Railroads and Commercial Agriculture In Nineteenth-Century United States
-[3] Extinction Episodes of The Past
-Select article number: 1
-```
-
-导出结果默认在：
+Exported files are written to:
 
 ```text
-output/tpo33/article-1/
+output/<tpo>/article-<n>/
 ```
 
-## 命令行用法
+Common files:
 
-列出某个 TPO 的文章：
+- `worksheet.html`
+- `document.html`
+- `answers.html`
+- `raw.json`
 
-```bash
-PYTHONPATH=src python3 -m zhan_toefl_crawler list tpo33
-```
+Prebuilt index files:
 
-导出某篇文章：
+- `data/article_index.json`
+- `data/article_index.csv`
 
-```bash
-PYTHONPATH=src python3 -m zhan_toefl_crawler export tpo33 1
-```
+## Data Source
 
-指定输出目录：
+中文：本项目中的网页数据均通过爬虫从小站教育网站获取。  
+English: All website data in this project is crawled from Xiaozhan Education.
 
-```bash
-PYTHONPATH=src python3 -m zhan_toefl_crawler export tpo33 1 --output ./exports
-```
+## Rebuild Index
 
-## 导出内容说明
+See [REBUILD_INDEX.md](/Users/chensfolder/zhan-toefl-crawler/REBUILD_INDEX.md).
 
-`document.md`
+## Disclaimer
 
-- 包含文章原文
-- 包含全部题目、选项、正确答案
-
-`worksheet.md`
-
-- 保留文章原文
-- 题目保留空白答题区，不显示正确答案
-- 更像练习试卷
-
-`raw.json`
-
-- 方便后续接 Web UI、数据库、批量抓取脚本
-
-## 说明
-
-- 当前实现基于小站页面现有 HTML 结构，若网站改版，解析规则可能需要微调。
-- 项目目前优先覆盖阅读题型；已经兼容普通选择题、句子插入题、总结题等常见结构。
+中文：本项目仅用于学习、研究与个人练习，请勿用于商业用途。若有侵权问题，请联系 `chenjqjason@icloud.com`。  
+English: This project is for study, research, and personal practice only. For any infringement concern, please contact `chenjqjason@icloud.com`.

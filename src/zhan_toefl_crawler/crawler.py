@@ -28,13 +28,13 @@ PRINT_STYLES = """
   }
 
   :root {
-    --paper: #fffdf8;
-    --ink: #1f2937;
-    --muted: #6b7280;
-    --line: #ded7cb;
-    --accent: #8f5c38;
-    --accent-soft: #f4eadf;
-    --panel: #fffaf2;
+    --paper: #ffffff;
+    --ink: #111111;
+    --muted: #444444;
+    --line: #999999;
+    --accent: #000000;
+    --accent-soft: #ffffff;
+    --panel: #ffffff;
   }
 
   * {
@@ -44,7 +44,7 @@ PRINT_STYLES = """
   body {
     margin: 0;
     color: var(--ink);
-    background: #efe8dc;
+    background: #ffffff;
     font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
     line-height: 1.62;
   }
@@ -54,7 +54,7 @@ PRINT_STYLES = """
     min-height: 297mm;
     margin: 0 auto 16px;
     background: var(--paper);
-    box-shadow: 0 14px 40px rgba(37, 26, 17, 0.14);
+    box-shadow: none;
   }
 
   .cover {
@@ -73,7 +73,7 @@ PRINT_STYLES = """
   h1, h2, h3 {
     margin: 0;
     font-weight: 700;
-    color: #24190f;
+    color: #000000;
   }
 
   h1 {
@@ -90,7 +90,7 @@ PRINT_STYLES = """
 
   .passage-box {
     border: 1px solid var(--line);
-    background: linear-gradient(180deg, #fffefb, var(--panel));
+    background: #ffffff;
     border-radius: 14px;
     padding: 11mm 10mm;
   }
@@ -133,7 +133,7 @@ PRINT_STYLES = """
     border: 1px solid var(--line);
     border-radius: 10px;
     padding: 8px 10px;
-    background: #fffdfa;
+    background: #ffffff;
     display: inline-block;
     width: 100%;
   }
@@ -170,9 +170,10 @@ PRINT_STYLES = """
     display: inline-block;
     margin-top: 6px;
     padding: 4px 8px;
+    border: 1px solid var(--line);
     border-radius: 999px;
-    background: var(--accent-soft);
-    color: #6f4527;
+    background: #ffffff;
+    color: #000000;
     font-size: 9.5pt;
   }
 
@@ -256,6 +257,8 @@ SUBJECT_ENGLISH_MAP = {
     "政治学": "Political Science",
     "教育": "Education",
     "材料科学": "Materials Science",
+    "艺术": "Art",
+    "艺术史": "Art History",
     "植物学": "Botany",
     "气象学": "Meteorology",
     "海洋生物学": "Marine Biology",
@@ -264,7 +267,6 @@ SUBJECT_ENGLISH_MAP = {
     "生物学": "Biology",
     "社会学": "Sociology",
     "考古学": "Archaeology",
-    "艺术史": "Art History",
     "地质学": "Geology",
     "经济学": "Economics",
     "语言学": "Linguistics",

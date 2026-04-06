@@ -55,6 +55,105 @@ def print_catalog_hits(entries) -> None:
         )
 
 
+def print_search_hits(entries) -> None:
+    for entry in entries:
+        print(
+            f"[{entry.tpo_label} #{entry.article_index}] {entry.title} | "
+            f"{entry.subject} / {entry.subject_english}"
+        )
+
+
+def print_tpo_entries(entries) -> None:
+    for entry in sorted(entries, key=lambda item: item.article_index):
+        print(f"[{entry.article_index}] {entry.title} | {entry.subject} / {entry.subject_english}")
+
+
+def parse_tpo_input(value: str) -> str:
+    raw = value.strip().lower()
+    if not raw:
+        raise CrawlError("TPO input cannot be empty.")
+    if raw.startswith("tpo"):
+        return raw
+    if raw.isdigit():
+        return f"tpo{int(raw)}"
+    raise CrawlError(f"Invalid TPO input: {value}")
+
+
+def parse_article_selection(value: str) -> list[int]:
+    cleaned = value.strip().lower()
+    if not cleaned:
+        raise CrawlError("Article selection cannot be empty.")
+    if cleaned == "q":
+        return []
+    selected: list[int] = []
+    for char in cleaned:
+        if char in {"1", "2", "3"}:
+            number = int(char)
+            if number not in selected:
+                selected.append(number)
+    if not selected:
+        raise CrawlError("Please enter 1, 2, 3, or a combination like 12 or 123.")
+    return selected
+
+
+def handle_search(catalog) -> None:
+    print("How would you like to filter?")
+    print("[1] TPO number")
+    print("[2] Article name")
+    print("[3] Article category")
+    mode = input("Press a key: ").strip().lower()
+
+    if mode == "1":
+        tpo = parse_tpo_input(input("Enter TPO number: ").strip())
+        hits = [entry for entry in catalog if entry.tpo_label.lower() == tpo]
+    elif mode == "2":
+        keyword = input("Enter article name keyword: ").strip()
+        hits = [
+            entry for entry in catalog
+            if keyword.lower() in entry.title.lower()
+        ]
+    elif mode == "3":
+        keyword = input("Enter article category: ").strip()
+        hits = [
+            entry for entry in catalog
+            if keyword.lower() in entry.subject.lower()
+            or keyword.lower() in entry.subject_english.lower()
+        ]
+    else:
+        print("Invalid choice. Returning to main menu.")
+        return
+
+    if not hits:
+        print("No results found.")
+        return
+    print_search_hits(hits[:100])
+
+
+def handle_export(catalog, output_root: Path) -> None:
+    tpo = parse_tpo_input(input("Which TPO? ").strip())
+    hits = [entry for entry in catalog if entry.tpo_label.lower() == tpo]
+    if not hits:
+        print(f"No indexed entries found for: {tpo}")
+        return
+
+    print_tpo_entries(hits)
+    selected_raw = input("Which article? (1 / 2 / 3 / 12 / 123, q to cancel): ").strip()
+    selected_articles = parse_article_selection(selected_raw)
+    if not selected_articles:
+        return
+
+    for article_index in selected_articles:
+        selected_entry = next(
+            (entry for entry in hits if entry.article_index == article_index),
+            None,
+        )
+        if selected_entry is None:
+            continue
+        exported = export_article(selected_entry.tpo_label, selected_entry.article_index)
+        target_dir = export_to_directory(exported, output_root)
+        print(f"Exported to: {target_dir}")
+
+
 def get_catalog(catalog_root: Path, refresh: bool = False):
     if refresh:
         return refresh_catalog(catalog_root)
@@ -65,13 +164,13 @@ def get_catalog(catalog_root: Path, refresh: bool = False):
 
 
 def run_interactive(output_root: Path, catalog_root: Path) -> int:
-    catalog = refresh_catalog(catalog_root)
-    print(f"Catalog refreshed: {catalog_root / 'article_index.json'}")
+    catalog = get_catalog(catalog_root)
+    print(f"Catalog loaded: {catalog_root / 'article_index.json'}")
     while True:
         print("")
         print("Choose an action:")
-        print("[1] Search TPO or keyword")
-        print("[2] Export worksheet")
+        print("[1] Search")
+        print("[2] Create worksheet and save locally")
         print("[Q] Quit")
 
         choice = input("Press a key: ").strip().lower()
@@ -79,27 +178,11 @@ def run_interactive(output_root: Path, catalog_root: Path) -> int:
             return 0
 
         if choice == "1":
-            keyword = input("Enter TPO or keyword: ").strip()
-            if keyword.lower().startswith("tpo"):
-                hits = [entry for entry in catalog if entry.tpo_label.lower() == keyword.lower()]
-            else:
-                hits = search_catalog(catalog, keyword)
-            if not hits:
-                print(f"No matches found for: {keyword}")
-                continue
-            print_catalog_hits(hits[:50])
+            handle_search(catalog)
             continue
 
         if choice == "2":
-            tpo = input("Enter TPO (example: tpo33): ").strip()
-            articles = list_articles(tpo)
-            for article in articles:
-                suffix = f" | {article.category}" if getattr(article, "category", "") else ""
-                print(f"[{article.article_index}] {article.title}{suffix}")
-            selected = int(input("Select article number: ").strip())
-            exported = export_article(tpo, selected)
-            target_dir = export_to_directory(exported, output_root)
-            print(f"Exported to: {target_dir}")
+            handle_export(catalog, output_root)
             continue
 
         print("Invalid choice. Please press 1, 2, or Q.")

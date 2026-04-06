@@ -4,10 +4,12 @@ import json
 import re
 import ssl
 import time
+import zipfile
 from dataclasses import asdict, dataclass
-from html import escape, unescape
+from html import unescape
 from pathlib import Path
 from typing import Iterable
+from xml.sax.saxutils import escape as xml_escape
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -19,201 +21,6 @@ USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
 )
-
-PRINT_STYLES = """
-<style>
-  @page {
-    size: A4;
-    margin: 10mm;
-  }
-
-  :root {
-    --paper: #ffffff;
-    --ink: #111111;
-    --muted: #444444;
-    --line: #999999;
-    --accent: #000000;
-    --accent-soft: #ffffff;
-    --panel: #ffffff;
-  }
-
-  * {
-    box-sizing: border-box;
-  }
-
-  body {
-    margin: 0;
-    color: var(--ink);
-    background: #ffffff;
-    font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
-    line-height: 1.62;
-  }
-
-  .page {
-    width: 210mm;
-    min-height: 297mm;
-    margin: 0 auto 16px;
-    background: var(--paper);
-    box-shadow: none;
-  }
-
-  .cover {
-    padding: 14mm 14mm 12mm;
-    page-break-after: always;
-  }
-
-  .kicker {
-    color: var(--accent);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-    margin-bottom: 10px;
-  }
-
-  h1, h2, h3 {
-    margin: 0;
-    font-weight: 700;
-    color: #000000;
-  }
-
-  h1 {
-    font-size: 24px;
-    line-height: 1.2;
-    margin-bottom: 8px;
-  }
-
-  .subtitle {
-    color: var(--muted);
-    font-size: 14px;
-    margin-bottom: 20px;
-  }
-
-  .passage-box {
-    border: 1px solid var(--line);
-    background: #ffffff;
-    border-radius: 14px;
-    padding: 11mm 10mm;
-  }
-
-  .passage-text {
-    font-size: 11.4pt;
-    white-space: pre-wrap;
-    text-align: justify;
-  }
-
-  .question-page {
-    min-height: 297mm;
-    page-break-before: always;
-    padding: 12mm 12mm 10mm;
-  }
-
-  .question-header {
-    margin-bottom: 10px;
-  }
-
-  .question-grid {
-    column-count: 2;
-    column-gap: 12px;
-  }
-
-  .panel-title {
-    font-size: 17px;
-    margin-bottom: 6px;
-  }
-
-  .panel-note {
-    font-size: 10px;
-    color: var(--muted);
-    margin-bottom: 8px;
-  }
-
-  .question {
-    margin-bottom: 10px;
-    break-inside: avoid;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    padding: 8px 10px;
-    background: #ffffff;
-    display: inline-block;
-    width: 100%;
-  }
-
-  .question-number {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--accent);
-    margin-bottom: 4px;
-  }
-
-  .prompt {
-    font-size: 10pt;
-    line-height: 1.42;
-    margin-bottom: 7px;
-  }
-
-  .option {
-    font-size: 9.3pt;
-    line-height: 1.35;
-    margin: 3px 0;
-  }
-
-  .answer-line {
-    margin-top: 8px;
-    padding-top: 6px;
-    border-top: 1px dashed var(--line);
-    color: var(--muted);
-    font-size: 9.5pt;
-  }
-
-  .correct-answer {
-    display: inline-block;
-    margin-top: 6px;
-    padding: 4px 8px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: #ffffff;
-    color: #000000;
-    font-size: 9.5pt;
-  }
-
-  .answer-sheet {
-    padding: 14mm 14mm 12mm;
-    page-break-before: always;
-  }
-
-  .answer-list {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px 18px;
-    margin-top: 12px;
-  }
-
-  .answer-item {
-    border-bottom: 1px dashed var(--line);
-    padding: 4px 0;
-    font-size: 11pt;
-  }
-
-  @media print {
-    body {
-      background: white;
-    }
-
-    .page {
-      width: auto;
-      min-height: auto;
-      margin: 0;
-      box-shadow: none;
-    }
-
-    .question-grid {
-      column-gap: 10px;
-    }
-  }
-</style>
-"""
-
 
 class CrawlError(RuntimeError):
     pass
@@ -642,70 +449,6 @@ def render_worksheet(exported: ArticleExport) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
-def paragraphize(text: str) -> str:
-    parts = [part.strip() for part in text.split("\n\n") if part.strip()]
-    return "\n".join(f"<p>{escape(part)}</p>" for part in parts)
-
-
-def render_print_html(exported: ArticleExport, show_answers: bool) -> str:
-    question_blocks: list[str] = []
-    for question in exported.questions:
-        options_html = "\n".join(
-            f'<div class="option">{escape(option)}</div>'
-            for option in question.options
-        )
-        answer_html = (
-            f'<div class="correct-answer">Correct answer: {escape(question.correct_answer or "N/A")}</div>'
-            if show_answers
-            else '<div class="answer-line">Student answer: ______________________________</div>'
-        )
-        question_blocks.append(
-            "\n".join(
-                [
-                    '<section class="question">',
-                    f'<div class="question-number">Question {question.index}</div>',
-                    f'<div class="prompt">{escape(question.prompt)}</div>',
-                    options_html,
-                    answer_html,
-                    '</section>',
-                ]
-            )
-        )
-
-    sheet_label = "Document" if show_answers else "Worksheet"
-    subtitle = "With answers" if show_answers else "Student print version"
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{escape(sheet_label)} - {escape(exported.title)}</title>
-  {PRINT_STYLES}
-</head>
-<body>
-  <section class="page cover">
-    <div class="kicker">{escape(exported.tpo_label.upper())} • Article {exported.article_index}</div>
-    <h1>{escape(exported.title)}</h1>
-    <div class="subtitle">{escape(subtitle)}</div>
-    <div class="passage-box">
-      <div class="passage-text">{paragraphize(exported.article_text)}</div>
-    </div>
-  </section>
-
-  <section class="page question-page">
-    <div class="question-header">
-      <div class="panel-title">Questions</div>
-      <div class="panel-note">{escape(subtitle)}</div>
-    </div>
-    <div class="question-grid">
-      {"".join(question_blocks)}
-    </div>
-  </section>
-</body>
-</html>
-"""
-
-
 def render_answers_markdown(exported: ArticleExport) -> str:
     lines = [
         f"# Answers: {exported.tpo_label.upper()} Article {exported.article_index}",
@@ -716,33 +459,149 @@ def render_answers_markdown(exported: ArticleExport) -> str:
     for question in exported.questions:
         lines.append(f"- {question.index}. `{question.correct_answer or 'N/A'}`")
     return "\n".join(lines).strip() + "\n"
+def xml_text(text: str) -> str:
+    return xml_escape(text, {'"': "&quot;", "'": "&apos;"})
 
 
-def render_answers_html(exported: ArticleExport) -> str:
-    items = "\n".join(
-        f'<div class="answer-item">Question {question.index}: <strong>{escape(question.correct_answer or "N/A")}</strong></div>'
-        for question in exported.questions
+def docx_paragraph(
+    text: str,
+    *,
+    bold: bool = False,
+    size: int | None = None,
+    align: str | None = None,
+    page_break_before: bool = False,
+    spacing_after: int | None = None,
+) -> str:
+    ppr: list[str] = []
+    if align:
+        ppr.append(f'<w:jc w:val="{align}"/>')
+    if page_break_before:
+        ppr.append("<w:pageBreakBefore/>")
+    if spacing_after is not None:
+        ppr.append(f'<w:spacing w:after="{spacing_after}"/>')
+
+    rpr: list[str] = []
+    if bold:
+        rpr.append("<w:b/>")
+    if size is not None:
+        rpr.append(f'<w:sz w:val="{size}"/><w:szCs w:val="{size}"/>')
+
+    ppr_xml = f"<w:pPr>{''.join(ppr)}</w:pPr>" if ppr else ""
+    rpr_xml = f"<w:rPr>{''.join(rpr)}</w:rPr>" if rpr else ""
+    return f"<w:p>{ppr_xml}<w:r>{rpr_xml}<w:t xml:space=\"preserve\">{xml_text(text)}</w:t></w:r></w:p>"
+
+
+def docx_page_break() -> str:
+    return "<w:p><w:r><w:br w:type=\"page\"/></w:r></w:p>"
+
+
+def docx_two_column_section() -> str:
+    return (
+        "<w:p><w:pPr><w:sectPr>"
+        '<w:pgSz w:w="11906" w:h="16838"/>'
+        '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" '
+        'w:header="708" w:footer="708" w:gutter="0"/>'
+        '<w:cols w:num="2" w:space="425"/>'
+        "</w:sectPr></w:pPr></w:p>"
     )
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Answers - {escape(exported.title)}</title>
-  {PRINT_STYLES}
-</head>
-<body>
-  <section class="page answer-sheet">
-    <div class="kicker">{escape(exported.tpo_label.upper())} • Article {exported.article_index}</div>
-    <h1>{escape(exported.title)}</h1>
-    <div class="subtitle">Answer key</div>
-    <div class="answer-list">
-      {items}
-    </div>
-  </section>
-</body>
-</html>
-"""
+
+
+def docx_single_column_section() -> str:
+    return (
+        "<w:p><w:pPr><w:sectPr>"
+        '<w:pgSz w:w="11906" w:h="16838"/>'
+        '<w:pgMar w:top="567" w:right="567" w:bottom="567" w:left="567" '
+        'w:header="708" w:footer="708" w:gutter="0"/>'
+        '<w:cols w:num="1" w:space="0"/>'
+        "</w:sectPr></w:pPr></w:p>"
+    )
+
+
+def build_docx(document_body: str, output_path: Path) -> None:
+    content_types = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/>
+  <Override PartName="/word/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml"/>
+</Types>"""
+    rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/>
+</Relationships>"""
+    document_rels = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>"""
+    styles = """<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+  <w:style w:type="paragraph" w:default="1" w:styleId="Normal">
+    <w:name w:val="Normal"/>
+    <w:qFormat/>
+    <w:rPr>
+      <w:rFonts w:ascii="Times New Roman" w:hAnsi="Times New Roman" w:eastAsia="Songti SC"/>
+      <w:sz w:val="22"/>
+      <w:szCs w:val="22"/>
+    </w:rPr>
+  </w:style>
+</w:styles>"""
+    document_xml = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas"
+ xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+ xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math"
+ xmlns:v="urn:schemas-microsoft-com:vml"
+ xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing"
+ xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"
+ xmlns:w10="urn:schemas-microsoft-com:office:word"
+ xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+ xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml"
+ xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup"
+ xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk"
+ xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml"
+ xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape"
+ mc:Ignorable="w14 wp14">
+  <w:body>
+    {document_body}
+  </w:body>
+</w:document>"""
+    with zipfile.ZipFile(output_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", content_types)
+        archive.writestr("_rels/.rels", rels)
+        archive.writestr("word/_rels/document.xml.rels", document_rels)
+        archive.writestr("word/styles.xml", styles)
+        archive.writestr("word/document.xml", document_xml)
+
+
+def render_docx_document(exported: ArticleExport, show_answers: bool) -> str:
+    body: list[str] = []
+    body.append(docx_paragraph(f"{exported.tpo_label.upper()} Article {exported.article_index}", bold=True, size=24, align="center", spacing_after=120))
+    body.append(docx_paragraph(exported.title, bold=True, size=32, align="center", spacing_after=240))
+    for paragraph in [part.strip() for part in exported.article_text.split("\n\n") if part.strip()]:
+        body.append(docx_paragraph(paragraph, size=21, spacing_after=120))
+
+    body.append(docx_page_break())
+    body.append(docx_two_column_section())
+    body.append(docx_paragraph("Questions", bold=True, size=24, spacing_after=120))
+    for question in exported.questions:
+        body.append(docx_paragraph(f"{question.index}. {question.prompt}", bold=True, size=20, spacing_after=40))
+        for option in question.options:
+            body.append(docx_paragraph(option, size=18, spacing_after=20))
+        if show_answers:
+            body.append(docx_paragraph(f"Answer: {question.correct_answer or 'N/A'}", size=18, spacing_after=80))
+        else:
+            body.append(docx_paragraph("Answer: ____________________", size=18, spacing_after=80))
+    body.append(docx_single_column_section())
+    return "".join(body)
+
+
+def render_docx_answers(exported: ArticleExport) -> str:
+    body: list[str] = []
+    body.append(docx_paragraph(f"{exported.tpo_label.upper()} Article {exported.article_index}", bold=True, size=24, align="center", spacing_after=120))
+    body.append(docx_paragraph(f"Answers - {exported.title}", bold=True, size=30, align="center", spacing_after=240))
+    for question in exported.questions:
+        body.append(docx_paragraph(f"{question.index}. {question.correct_answer or 'N/A'}", size=22, spacing_after=80))
+    body.append(docx_single_column_section())
+    return "".join(body)
 
 
 def export_to_directory(exported: ArticleExport, output_root: Path) -> Path:
@@ -765,20 +624,11 @@ def export_to_directory(exported: ArticleExport, output_root: Path) -> Path:
         render_worksheet(exported),
         encoding="utf-8",
     )
-    (target_dir / "document.html").write_text(
-        render_print_html(exported, show_answers=True),
-        encoding="utf-8",
-    )
-    (target_dir / "worksheet.html").write_text(
-        render_print_html(exported, show_answers=False),
-        encoding="utf-8",
-    )
     (target_dir / "answers.md").write_text(
         render_answers_markdown(exported),
         encoding="utf-8",
     )
-    (target_dir / "answers.html").write_text(
-        render_answers_html(exported),
-        encoding="utf-8",
-    )
+    build_docx(render_docx_document(exported, show_answers=True), target_dir / "document.docx")
+    build_docx(render_docx_document(exported, show_answers=False), target_dir / "worksheet.docx")
+    build_docx(render_docx_answers(exported), target_dir / "answers.docx")
     return target_dir
